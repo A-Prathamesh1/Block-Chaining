@@ -1,0 +1,212 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Sat Oct 21 19:38:38 2017
+
+@author: PRATHAMESH
+"""
+
+def str_to_bitarray(s):
+    # Converts string to a bit array.
+    bitArr = list()
+    for byte in s:
+        bits = bin(byte)[2:] if isinstance(byte, int) else bin(ord(byte))[2:]
+        while len(bits) < 8:
+            bits = "0"+bits  # You can Add additional 0's as needed
+        for bit in bits:
+            bitArr.append(int(bit))
+    return(bitArr)
+
+def bitarray_to_str(bitArr):
+    # Converts bit array to string
+    result = ''
+    for i in range(0,len(bitArr),8):
+        byte = bitArr[i:i+8]
+        s = ''.join([str(b) for b in byte])
+        result = result+chr(int(s,2))
+    return result
+
+def xor(a, b):
+    # xor function 
+    return [i^j for i,j in zip(a,b)]
+
+def VernamEncrypt(binKey,block):
+    # Vernam cipher. try DES here
+    if (len(binKey) != len(block)):
+        raise Exception("Key is not same size as block")
+    return xor(binKey,block)
+
+def VernamDecrypt(binKey,block):
+    # Basically a Vernam cipher.  Note it is
+    # exactly the same as encryption.
+    return VernamEncrypt(binKey,block)
+
+class BlockChain():
+
+    # Modes
+    CBC = 0
+    PCBC = 1
+    CFB = 2
+    removeable_bits = 0
+    def __init__(self,keyStr,ivStr,encryptMethod,decryptMethod,mode):
+        self.encryptBlk = encryptMethod
+        self.decryptBlk = decryptMethod
+        self.mode = mode
+        self.key = keyStr
+        # Any other variables you might need
+
+    def encrypt(self,msg):
+        # Returns a list of cipher blocks. These blocks are
+        # generated based on the mode. The message may need
+        # to be padded if not a multiple of 8 bytes (64 bits).
+#        BP,AP = 0
+#        print("Plaint text message",msg)
+        byte_msg = []
+        sz = int(len(msg)/8)
+#        print("sz of plaintext in bytes : ",sz)
+#        print("Key: ",self.key,"len: ",len(self.key))
+        
+        while msg:
+            bin_msg_chunk = str_to_bitarray(msg[:len(self.key)]) 
+            msg = msg[len(self.key):]#removing front part dont need it 
+            byte_msg.append(bin_msg_chunk)
+            
+#        print("Byte Message BP: ",byte_msg[-1],len(byte_msg[-1]))
+        d = len(byte_msg[0]) - len(byte_msg[-1]) 
+#        print("dif: ",d)
+        BP = len(byte_msg[-1])
+        print("Byte Message BP: ",byte_msg[-1],len(byte_msg[-1]))
+        for i in range(d-8):# d-8 Since we are appending last byte as a binary 8 bits to know how many bits needs to be removed 
+        #and if last byte contains the one (00000001) then only the byte itself needs to be removed
+            byte_msg[-1].append(0)
+#            print("byte_msg[-1]: ",byte_msg[-1])
+        
+        temp = bin(int(d/8))[2:]#Converting the last byte to binary string 
+        
+        while len(temp) < 8:# padding the last binary string
+            temp = '0'+ temp
+#        print("temp: ",temp)
+        
+        mylist = [ int(x) for x in temp] # list comprehention 
+#        print("mylist: ",mylist)
+        byte_msg[-1].extend(mylist)
+#        print("byte_msg: ",byte_msg)     
+        AP = len(byte_msg[-1])
+        self.removeable_bits = AP - BP 
+        print("removeable_bits: {}".format(self.removeable_bits))
+        print("Byte Message AP: ",byte_msg[-1],len(byte_msg[-1]))
+        cipherBlks = list()
+        
+
+        if self.mode == 0:
+#            iv_bit_array = str_to_bitarray(iv)
+            print("Performing CBC Encryption:\t",len(byte_msg),"\n")
+            for i in range(len(byte_msg)):
+                iv_bit_array = str_to_bitarray(iv)
+                xord = xor(iv_bit_array,byte_msg[i])
+                ci = VernamEncrypt(str_to_bitarray(self.key),xord)
+                cipherBlks.append(ci)
+                print("BLK{}: {}".format(i,bitarray_to_str(ci)))
+                iv_bit_array = ci
+#            print("cipherBlks",cipherBlks,len(cipherBlks))
+            return cipherBlks
+        
+        elif self.mode == 1:
+            print("Performing PCBC Encyption\n")
+            iv_bit_array = str_to_bitarray(iv)
+            for i in range(len(byte_msg)):
+                xord = xor(iv_bit_array,byte_msg[i])
+                ci = VernamEncrypt(str_to_bitarray(self.key),xord)
+                print("BLK{}: {}".format(i,bitarray_to_str(ci)))
+                cipherBlks.append(ci)
+                xord = xor(ci,byte_msg[i])
+                
+            return cipherBlks
+        else:
+            print("Performing CFB Encryption:")
+            iv_bit_array = str_to_bitarray(iv)
+#            print("len(byte_msg)",len(cipherBlks))
+            for i in range(len(byte_msg)):                
+                ci = VernamEncrypt(str_to_bitarray(self.key),iv_bit_array)
+#                print("i: ",i)
+                xord = xor(ci,byte_msg[i]) 
+                cipherBlks.append(xord)
+                print("BLK{}: {}".format(i,bitarray_to_str(ci)))
+                iv_bit_array = xord 
+#                print("xord[-8]",bitarray_to_str(xord[-8]))
+            return cipherBlks    
+        
+    def padding_remover(self,last_block):
+        print("Inside padding remover")
+        print("last bock ",last_block,len(last_block))
+        removable = self.removeable_bits
+        print("removable",removable)
+        p_removed = last_block[:-removable:]
+        print("p_removed:{}".format(bitarray_to_str(p_removed)))
+        return p_removed
+#        print(mylist1,len(mylist1))
+#        print("Remover: last_block",last_block[0:-(self.removeable_bits):])
+    
+    def decrypt(self,cipherBlks):
+        # Takes a list of cipher blocks and returns the
+        # message. Again, decryption is based on mode.
+        msg = ""
+        # Your code here...
+        
+        if self.mode == 0:#cipherBlks[0])*len(cipherBlks
+            print("Peforming CBC Decryption:")         
+#            print("len(cipherBlks): ",len(cipherBlks))                            
+            for i in range(len(cipherBlks)):
+                co = VernamDecrypt(str_to_bitarray(self.key),cipherBlks[i])
+                temp2 = str_to_bitarray(iv)
+                msg = xor(temp2,co)
+                temp2 = cipherBlks[i]
+#                print("{}:{}".format(i,bitarray_to_str(msg)))
+#                print("msg: ",bitarray_to_str(msg))
+            print("Last block",cipherBlks[-1])
+            return cipherBlks
+        
+        elif self.mode == 1:
+            print("Peforming PCBC Decryption")
+#            print("len(cipherBlks): ",len(cipherBlks))
+            for i in range(len(cipherBlks)):
+#                print("i",i)
+                co = VernamDecrypt(str_to_bitarray(self.key),cipherBlks[i])
+#                print("co: ",bitarray_to_str(co))
+                temp2 = str_to_bitarray(iv)
+#                print("temp2 : ",bitarray_to_str(temp2))
+                msg = xor(temp2,co)
+                print("BLK{}: {} ".format(i,(bitarray_to_str(msg))))
+                temp2 = xor(cipherBlks[i],msg)
+#            print("msg[-1]: ".format(msg)    )
+            return cipherBlks
+        else:
+            print("Peforming CFB Decryption\n")
+            iv_bit_array = str_to_bitarray(iv)
+            for i in range(len(cipherBlks)):
+                co = VernamDecrypt(str_to_bitarray(self.key),iv_bit_array)
+                pl_txt = xor(co,cipherBlks[i])
+                print("BLK{}: ",i,bitarray_to_str(pl_txt))
+                iv_bit_array = cipherBlks[i]
+                co = VernamDecrypt(str_to_bitarray(self.key),iv_bit_array)    
+            
+            return cipherBlks
+                
+if __name__ == '__main__':
+    key = "secret_k"
+    iv = "whatever"
+    msg = "This is my message.There are many like it but this one is mine."
+    
+#   input("PLAIN TEXT:",msg,"\nINITIAL VECTOR:",iv,"\nKEY:",key,"\n","\nENTER MODE NO.")
+    blkChain = BlockChain(key,iv,VernamEncrypt,VernamDecrypt,BlockChain.PCBC)#CFB
+    cipherblks = blkChain.encrypt(msg)
+    print("Ciphertext:")
+#   for blk in cipherblks:
+#        print(bitarray_to_str(blk))
+    print("\nDecrypted:")
+    msg = blkChain.decrypt(cipherblks)
+    lb = msg[-1]
+    lb = blkChain.padding_remover(lb)        
+#    print("lb: ",lb,len(lb))
+    msg[-1] = lb
+    print("msg",lb,len(lb))
+    print("msg ready to be passed to next device:",bitarray_to_str(msg[-1]),len(msg))
